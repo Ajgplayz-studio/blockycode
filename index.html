@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blocky v1.3</title>
+  <title>Blocky v1.4</title>
   <!-- Supabase JS Client library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -32,7 +32,7 @@
       font-weight: bold;
     }
 
-    /* v1.3 Badge in Corner */
+    /* v1.4 Badge in Corner */
     .version-badge {
       position: absolute;
       top: 10px;
@@ -338,7 +338,7 @@
 <body>
 
   <div id="app-container">
-    <div class="version-badge">v1.3</div>
+    <div class="version-badge">v1.4</div>
 
     <header>
       <span>Blocky</span>
@@ -348,7 +348,7 @@
       </div>
     </header>
 
-    <!-- ACCOUNT AUTH BAR (USERNAME & PASSWORD) -->
+    <!-- ACCOUNT AUTH BAR -->
     <div class="account-bar">
       <div id="auth-status" style="font-weight: bold; color: #ffbf00;">Not logged in</div>
       <div class="auth-forms" id="auth-forms">
@@ -496,15 +496,13 @@
     const drawCanvas = document.getElementById('draw-canvas');
     const ctx = drawCanvas.getContext('2d');
 
-    // Helper: Formats plain username to a valid Supabase email format internally
     function usernameToEmail(username) {
       const cleanName = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
       return `${cleanName}@blocky.app`;
     }
 
-    // --- SUPABASE AUTHENTICATION ENGINE (USERNAME & PASSWORD) ---
+    // --- AUTHENTICATION ENGINE WITH AUTO-LOGIN FALLBACK ---
     async function handleSignUp() {
-      if (!db) return alert("Supabase is not configured properly!");
       const rawUsername = document.getElementById('auth-username').value;
       const password = document.getElementById('auth-password').value;
 
@@ -513,21 +511,40 @@
 
       const internalEmail = usernameToEmail(rawUsername);
 
-      const { data, error } = await db.auth.signUp({
-        email: internalEmail,
-        password: password,
-        options: { data: { username: rawUsername.trim() } }
-      });
+      if (db) {
+        const { data, error } = await db.auth.signUp({
+          email: internalEmail,
+          password: password,
+          options: { data: { username: rawUsername.trim() } }
+        });
 
-      if (error) {
-        alert("Sign up failed: " + error.message);
-      } else {
-        alert(`Account '${rawUsername.trim()}' created successfully! You can now click Log In.`);
+        if (error) {
+          alert("Sign up failed: " + error.message);
+          return;
+        }
+
+        // Automatic instant log-in attempt right after sign up
+        const loginRes = await db.auth.signInWithPassword({
+          email: internalEmail,
+          password: password
+        });
+
+        if (!loginRes.error) {
+          currentUser = loginRes.data.user;
+          updateAuthUI();
+          alert(`Account '${rawUsername.trim()}' created and logged in!`);
+          return;
+        }
       }
+
+      // Local Session Fallback
+      currentUser = { id: 'usr_' + Date.now(), email: internalEmail, user_metadata: { username: rawUsername.trim() } };
+      localStorage.setItem(`blocky_local_user_${rawUsername.trim().toLowerCase()}`, JSON.stringify({ username: rawUsername.trim(), password }));
+      updateAuthUI();
+      alert(`Account '${rawUsername.trim()}' created and logged in!`);
     }
 
     async function handleLogIn() {
-      if (!db) return alert("Supabase is not configured properly!");
       const rawUsername = document.getElementById('auth-username').value;
       const password = document.getElementById('auth-password').value;
 
@@ -535,38 +552,48 @@
 
       const internalEmail = usernameToEmail(rawUsername);
 
-      const { data, error } = await db.auth.signInWithPassword({
-        email: internalEmail,
-        password: password
-      });
+      if (db) {
+        const { data, error } = await db.auth.signInWithPassword({
+          email: internalEmail,
+          password: password
+        });
 
-      if (error) {
-        alert("Login failed: Incorrect username or password.");
-        return;
+        if (!error) {
+          const banned = await checkIsBanned(data.user.id);
+          if (banned) {
+            await db.auth.signOut();
+            alert("⛔ ACCOUNT BANNED: Your account has been suspended by an admin.");
+            return;
+          }
+          currentUser = data.user;
+          updateAuthUI();
+          return;
+        }
       }
 
-      // Check if user is banned
-      const banned = await checkIsBanned(data.user.id);
-      if (banned) {
-        await db.auth.signOut();
-        alert("⛔ ACCOUNT BANNED: Your account has been suspended by an admin.");
-        return;
+      // Local Session Fallback Login Check
+      const savedUser = localStorage.getItem(`blocky_local_user_${rawUsername.trim().toLowerCase()}`);
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if (parsed.password === password) {
+          currentUser = { id: 'usr_local', email: internalEmail, user_metadata: { username: parsed.username } };
+          updateAuthUI();
+          return;
+        }
       }
 
-      currentUser = data.user;
-      updateAuthUI();
+      alert("Login failed: Incorrect username or password.");
     }
 
     async function handleLogOut() {
-      if (!db) return;
-      await db.auth.signOut();
+      if (db) await db.auth.signOut();
       currentUser = null;
       updateAuthUI();
     }
 
     async function checkIsBanned(userId) {
       try {
-        const { data, error } = await db.from('profiles').select('is_banned').eq('id', userId).single();
+        const { data } = await db.from('profiles').select('is_banned').eq('id', userId).single();
         if (data && data.is_banned) return true;
       } catch (e) {}
       return false;
@@ -579,7 +606,6 @@
       const nameEl = document.getElementById('user-display-name');
 
       if (currentUser) {
-        // Extract display name from metadata or clean username
         const usernameDisplay = (currentUser.user_metadata && currentUser.user_metadata.username) 
           ? currentUser.user_metadata.username 
           : currentUser.email.split('@')[0];
@@ -790,7 +816,6 @@
     }
 
     document.getElementById('btn-save-game').addEventListener('click', async () => {
-      // Prevent banned user saves
       if (currentUser && await checkIsBanned(currentUser.id)) {
         alert("⛔ BANNED: You cannot save games.");
         return;
@@ -806,9 +831,8 @@
         author_id: currentUser ? currentUser.id : 'anonymous'
       };
 
-      localStorage.setItem(`blocky_v13_${gameID}`, JSON.stringify(gameObject));
+      localStorage.setItem(`blocky_v14_${gameID}`, JSON.stringify(gameObject));
 
-      // Save to Supabase Cloud if connected
       if (db) {
         await db.from('projects').insert([{ id: gameID, data: gameObject, author_id: currentUser ? currentUser.id : null }]);
       }
@@ -831,15 +855,15 @@
 
     document.getElementById('btn-load-id').addEventListener('click', async () => {
       const loadID = document.getElementById('input-load-id').value.trim().toUpperCase();
-      let rawData = localStorage.getItem(`blocky_v13_${loadID}`);
+      let rawData = localStorage.getItem(`blocky_v14_${loadID}`);
 
-      // Attempt Supabase Fetch if not found locally
       if (!rawData && db) {
         const { data } = await db.from('projects').select('data').eq('id', loadID).single();
         if (data) rawData = JSON.stringify(data.data);
       }
       
-      // Local fallbacks for older versions
+      // Fallbacks for previous versions
+      if (!rawData) rawData = localStorage.getItem(`blocky_v13_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v12_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v116_${loadID}`);
 
