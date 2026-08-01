@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Blocky v1.9 Studio</title>
+  <title>Blocky v1.9</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
@@ -391,7 +391,12 @@
       }
 
       document.getElementById('current-game-title').textContent = `💻 Workspace: ${gameTitle}`;
-      alert(`✅ '${gameTitle}' Saved!\n\nYour Game ID is: ${gameID}`);
+
+      // Automatically copy to clipboard
+      navigator.clipboard.writeText(gameID);
+
+      // Copyable prompt box
+      prompt(`✅ '${gameTitle}' Saved!\n\n(ID auto-copied to clipboard!) Copy below:`, gameID);
     });
 
     document.getElementById('btn-load-game').addEventListener('click', async () => {
