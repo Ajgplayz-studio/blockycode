@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blocky v1.3</title>
+  <!-- Supabase JS Client library -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; user-select: none; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { margin: 0; padding: 20px; background-color: #1e1e2e; color: white; display: flex; flex-direction: column; align-items: center; }
+
+    /* --- CONTAINER & LAYOUT --- */
+    #app-container {
+      width: 1020px;
+      background: #2b2b3d;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      border: 3px solid #4c97ff;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    header {
+      background: #4c97ff;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+    }
+
+    /* v1.3 Badge in Corner */
+    .version-badge {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      background: #ffbf00;
+      color: #181825;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 3px 8px;
+      border-radius: 12px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    .studio-layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      height: 600px;
+    }
+
+    /* --- ACCOUNT BAR --- */
+    .account-bar {
+      background: #181825;
+      padding: 8px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #3b3b54;
+      font-size: 13px;
+    }
+
+    .auth-forms {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .auth-input {
+      padding: 5px 8px;
+      border-radius: 4px;
+      border: 1px solid #3b3b54;
+      background: #2b2b3d;
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+      width: 120px;
+    }
+
+    /* --- LEFT SIDE: GAME VIEWPORT --- */
+    .viewport-panel {
+      background: #181825;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border-right: 2px solid #3b3b54;
+    }
+
+    #stage {
+      width: 290px;
+      height: 220px;
+      background: #85c1e9;
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+      border: 2px solid #fff;
+      transition: background 0.3s;
+    }
+
+    #game-sprite {
+      position: absolute;
+      top: 80px;
+      left: 110px;
+      font-size: 50px;
+      cursor: pointer;
+      transition: all 0.1s;
+      width: 60px;
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Speech Bubble for Say Block */
+    #speech-bubble {
+      position: absolute;
+      background: white;
+      color: black;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: bold;
+      display: none;
+      white-space: nowrap;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      z-index: 5;
+    }
+
+    .hud {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(0,0,0,0.6);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    /* --- ID & SHARE BAR --- */
+    .share-box {
+      width: 100%;
+      background: #2b2b3d;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .id-display {
+      display: flex;
+      gap: 6px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 8px;
+      border-radius: 6px;
+      border: none;
+      outline: none;
+      background: #181825;
+      color: #fff;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    /* --- RIGHT SIDE: EDITOR PANELS --- */
+    .editor-panel {
+      display: flex;
+      flex-direction: column;
+      background: #212130;
+      height: 560px;
+    }
+
+    .tab-bar {
+      display: flex;
+      background: #181825;
+    }
+
+    .tab-btn {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      color: #aaa;
+      font-weight: bold;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+    }
+
+    .tab-btn.active {
+      color: #ffbf00;
+      border-bottom: 3px solid #ffbf00;
+      background: #212130;
+    }
+
+    .tab-content {
+      padding: 15px;
+      flex: 1;
+      overflow: hidden;
+      display: none;
+    }
+
+    .tab-content.active { 
+      display: flex; 
+      flex-direction: column; 
+      gap: 12px; 
+    }
+
+    /* --- BLOCK CODER UI --- */
+    .block-palette {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      background: #181825;
+      padding: 10px;
+      border-radius: 8px;
+      max-height: 150px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .block {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 3px 0 rgba(0,0,0,0.3);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .block-input {
+      width: 45px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.5);
+      background: rgba(0, 0, 0, 0.25);
+      color: white;
+      font-weight: bold;
+      text-align: center;
+      outline: none;
+    }
+
+    .block-input-text {
+      width: 80px;
+      text-align: left;
+    }
+
+    .block-motion { background: #4c97ff; }
+    .block-looks { background: #9966ff; }
+    .block-sound { background: #cf63cf; }
+    .block-events { background: #ffbf00; color: #333; }
+    .block-control { background: #ffab19; }
+
+    /* --- SCROLLABLE SCRIPT AREA --- */
+    .script-area {
+      flex: 1;
+      height: 220px;
+      background: #181825;
+      border: 2px dashed #3b3b54;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow-y: auto;
+    }
+
+    .script-area::-webkit-scrollbar, .block-palette::-webkit-scrollbar { width: 8px; }
+    .script-area::-webkit-scrollbar-track, .block-palette::-webkit-scrollbar-track { background: #11111b; border-radius: 4px; }
+    .script-area::-webkit-scrollbar-thumb, .block-palette::-webkit-scrollbar-thumb { background: #3b3b54; border-radius: 4px; }
+    .script-area::-webkit-scrollbar-thumb:hover, .block-palette::-webkit-scrollbar-thumb:hover { background: #4c97ff; }
+
+    .empty-msg {
+      color: #666;
+      font-size: 13px;
+      text-align: center;
+      margin-top: 70px;
+      font-style: italic;
+    }
+
+    /* --- SPRITE & STAGE EDITOR UI --- */
+    .section-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #ffbf00;
+      margin-bottom: 4px;
+    }
+
+    .sprite-options, .bg-options {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .bg-swatch {
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      border: 2px solid white;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
+    #draw-canvas {
+      background: white;
+      border-radius: 8px;
+      cursor: crosshair;
+    }
+
+    /* --- BUTTONS --- */
+    .btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      color: white;
+      background: #4bc02f;
+      font-size: 12px;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-orange { background: #ffab19; }
+    .btn-purple { background: #8552e5; }
+    .btn-copy { background: #4c97ff; }
+    .btn-red { background: #e74c3c; }
+
+  </style>
+</head>
+<body>
+
+  <div id="app-container">
+    <div class="version-badge">v1.3</div>
+
+    <header>
+      <span>Blocky</span>
+      <div style="margin-right: 60px;">
+        <button class="btn btn-orange" id="btn-play">▶ Run Script</button>
+        <button class="btn" id="btn-reset">🔄 Reset Stage</button>
+      </div>
+    </header>
+
+    <!-- ACCOUNT AUTH BAR (USERNAME & PASSWORD) -->
+    <div class="account-bar">
+      <div id="auth-status" style="font-weight: bold; color: #ffbf00;">Not logged in</div>
+      <div class="auth-forms" id="auth-forms">
+        <input type="text" id="auth-username" class="auth-input" placeholder="Username">
+        <input type="password" id="auth-password" class="auth-input" placeholder="Password">
+        <button class="btn btn-purple" onclick="handleSignUp()">Sign Up</button>
+        <button class="btn" onclick="handleLogIn()">Log In</button>
+      </div>
+      <div id="auth-logged-in" style="display: none; gap: 8px; align-items: center;">
+        <span id="user-display-name" style="font-size: 13px; font-weight: bold; color: #4c97ff;"></span>
+        <button class="btn btn-red" onclick="handleLogOut()">Log Out</button>
+      </div>
+    </div>
+
+    <div class="studio-layout">
+      <!-- LEFT: STAGE & ID CONTROLS -->
+      <div class="viewport-panel">
+        <div id="stage">
+          <div class="hud" id="hud-score">Score: 0</div>
+          <div id="speech-bubble">Hello!</div>
+          <div id="game-sprite">🐱</div>
+        </div>
+
+        <!-- ID LOAD / SAVE SECTION -->
+        <div class="share-box">
+          <label style="font-size: 11px; font-weight: bold; color: #aaa;">LOAD GAME BY ID:</label>
+          <div class="id-display">
+            <input type="text" id="input-load-id" placeholder="Paste ID...">
+            <button class="btn btn-purple" id="btn-load-id">Load</button>
+          </div>
+
+          <hr style="border-color: #3b3b54; width: 100%; margin: 2px 0;">
+
+          <button class="btn btn-orange" id="btn-save-game">💾 Save Game & Get ID</button>
+          
+          <div class="id-display" id="copy-container" style="display: none;">
+            <input type="text" id="generated-id-input" readonly>
+            <button class="btn btn-copy" id="btn-copy-id">📋 Copy</button>
+          </div>
+          <span id="copy-status" style="font-size: 11px; color: #4bc02f; text-align: center; height: 12px;"></span>
+        </div>
+      </div>
+
+      <!-- RIGHT: BLOCK CODER & SPRITE/STAGE EDITOR -->
+      <div class="editor-panel">
+        <div class="tab-bar">
+          <button class="tab-btn active" onclick="switchTab('tab-blocks')">🧩 Block Coder</button>
+          <button class="tab-btn" onclick="switchTab('tab-sprite')">🎨 Sprite & Stage Editor</button>
+        </div>
+
+        <!-- TAB 1: BLOCK CODER -->
+        <div id="tab-blocks" class="tab-content active">
+          <span style="font-size: 12px; color: #aaa;">Click a block below to add it to your script:</span>
+          
+          <div class="block-palette">
+            <div class="block block-events" onclick="addBlock('WHEN_CLICKED')">When Sprite Clicked</div>
+            <div class="block block-motion" onclick="addBlock('MOVE', { val: 20 })">Move <span class="block-input">20</span> steps</div>
+            <div class="block block-motion" onclick="addBlock('SPIN', { val: 15 })">Turn <span class="block-input">15</span> °</div>
+            <div class="block block-motion" onclick="addBlock('RANDOM_POS')">Go to Random Position</div>
+            <div class="block block-looks" onclick="addBlock('SCORE', { val: 1 })">Change Score by <span class="block-input">1</span></div>
+            <div class="block block-looks" onclick="addBlock('SIZE', { val: 110 })">Set Size to <span class="block-input">110</span>%</div>
+            <div class="block block-looks" onclick="addBlock('SAY', { text: 'Hello!', duration: 2 })">Say <span class="block-input block-input-text">Hello!</span> for <span class="block-input">2</span> secs</div>
+            <div class="block block-sound" onclick="addBlock('POP_SOUND')">Play Pop Sound</div>
+            <div class="block block-control" onclick="addBlock('WAIT', { val: 1 })">Wait <span class="block-input">1</span> sec</div>
+          </div>
+
+          <span style="font-size: 12px; color: #aaa; margin-top: 4px;">Your Active Script (Scrollable):</span>
+          <div class="script-area" id="script-container">
+            <!-- Dynamic Blocks drop here -->
+          </div>
+          <button class="btn btn-orange" style="align-self: flex-end;" onclick="clearScript()">Clear Code</button>
+        </div>
+
+        <!-- TAB 2: SPRITE & STAGE EDITOR -->
+        <div id="tab-sprite" class="tab-content" style="overflow-y: auto;">
+          <!-- SPRITE SELECTION -->
+          <div class="section-title">1. Choose Sprite</div>
+          <div class="sprite-options">
+            <button class="btn" onclick="setEmojiSprite('🐱')">🐱</button>
+            <button class="btn" onclick="setEmojiSprite('🚀')">🚀</button>
+            <button class="btn" onclick="setEmojiSprite('⭐')">⭐</button>
+            <button class="btn" onclick="setEmojiSprite('👻')">👻</button>
+            <button class="btn" onclick="setEmojiSprite('⚽')">⚽</button>
+          </div>
+
+          <span style="font-size: 12px; color: #aaa;">Or Draw Your Custom Sprite:</span>
+          <div style="display: flex; gap: 10px;">
+            <canvas id="draw-canvas" width="100" height="100"></canvas>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <input type="color" id="draw-color" value="#ff0000">
+              <button class="btn btn-purple" style="font-size: 12px; padding: 6px 10px;" onclick="applyCustomDrawing()">Use Drawing</button>
+              <button class="btn" style="background:#555; font-size: 12px; padding: 6px 10px;" onclick="clearCanvas()">Clear</button>
+            </div>
+          </div>
+
+          <hr style="border-color: #3b3b54; width: 100%; margin: 5px 0;">
+
+          <!-- STAGE BACKGROUND SELECTION -->
+          <div class="section-title">2. Choose Stage Background</div>
+          <div class="bg-options">
+            <div class="bg-swatch" style="background: #85c1e9;" onclick="setStageBg('#85c1e9')"></div>
+            <div class="bg-swatch" style="background: #abebc6;" onclick="setStageBg('#abebc6')"></div>
+            <div class="bg-swatch" style="background: #f9e79f;" onclick="setStageBg('#f9e79f')"></div>
+            <div class="bg-swatch" style="background: #f5b7b1;" onclick="setStageBg('#f5b7b1')"></div>
+            <div class="bg-swatch" style="background: #d7bde2;" onclick="setStageBg('#d7bde2')"></div>
+            <div class="bg-swatch" style="background: #2c3e50;" onclick="setStageBg('#2c3e50')"></div>
+            
+            <div style="display: flex; align-items: center; gap: 6px; margin-left: 8px;">
+              <span style="font-size: 12px; color: #aaa;">Custom:</span>
+              <input type="color" id="bg-color-picker" value="#85c1e9" onchange="setStageBg(this.value)">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- SUPABASE CONFIGURATION ---
+    const SUPABASE_URL = 'https://ohojsqpbjmhkjppxoccd.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ob2pzcXBiam1oa2pwcHhvY2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NDIwNjYsImV4cCI6MjEwMTExODA2Nn0.S7DCqf7gJQpVfWk8ELGCpX3_NLn36o24TKhOTyMxyNs';
+
+    let db = null;
+    let currentUser = null;
+
+    if (SUPABASE_URL !== 'YOUR_SUPABASE_URL_HERE') {
+      db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
+
+    // --- APP STATE ---
+    let activeScript = [];
+    let currentSpriteType = 'emoji'; 
+    let currentSpriteVal = '🐱';
+    let currentStageBg = '#85c1e9';
+    let score = 0;
+    let rotation = 0;
+
+    // --- DOM ELEMENTS ---
+    const gameSprite = document.getElementById('game-sprite');
+    const stage = document.getElementById('stage');
+    const hudScore = document.getElementById('hud-score');
+    const speechBubble = document.getElementById('speech-bubble');
+    const scriptContainer = document.getElementById('script-container');
+    const drawCanvas = document.getElementById('draw-canvas');
+    const ctx = drawCanvas.getContext('2d');
+
+    // Helper: Formats plain username to a valid Supabase email format internally
+    function usernameToEmail(username) {
+      const cleanName = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      return `${cleanName}@blocky.app`;
+    }
+
+    // --- SUPABASE AUTHENTICATION ENGINE (USERNAME & PASSWORD) ---
+    async function handleSignUp() {
+      if (!db) return alert("Supabase is not configured properly!");
+      const rawUsername = document.getElementById('auth-username').value;
+      const password = document.getElementById('auth-password').value;
+
+      if (!rawUsername || !password) return alert("Please enter both a username and password.");
+      if (rawUsername.length < 3) return alert("Username must be at least 3 characters.");
+
+      const internalEmail = usernameToEmail(rawUsername);
+
+      const { data, error } = await db.auth.signUp({
+        email: internalEmail,
+        password: password,
+        options: { data: { username: rawUsername.trim() } }
+      });
+
+      if (error) {
+        alert("Sign up failed: " + error.message);
+      } else {
+        alert(`Account '${rawUsername.trim()}' created successfully! You can now click Log In.`);
+      }
+    }
+
+    async function handleLogIn() {
+      if (!db) return alert("Supabase is not configured properly!");
+      const rawUsername = document.getElementById('auth-username').value;
+      const password = document.getElementById('auth-password').value;
+
+      if (!rawUsername || !password) return alert("Please enter both username and password.");
+
+      const internalEmail = usernameToEmail(rawUsername);
+
+      const { data, error } = await db.auth.signInWithPassword({
+        email: internalEmail,
+        password: password
+      });
+
+      if (error) {
+        alert("Login failed: Incorrect username or password.");
+        return;
+      }
+
+      // Check if user is banned
+      const banned = await checkIsBanned(data.user.id);
+      if (banned) {
+        await db.auth.signOut();
+        alert("⛔ ACCOUNT BANNED: Your account has been suspended by an admin.");
+        return;
+      }
+
+      currentUser = data.user;
+      updateAuthUI();
+    }
+
+    async function handleLogOut() {
+      if (!db) return;
+      await db.auth.signOut();
+      currentUser = null;
+      updateAuthUI();
+    }
+
+    async function checkIsBanned(userId) {
+      try {
+        const { data, error } = await db.from('profiles').select('is_banned').eq('id', userId).single();
+        if (data && data.is_banned) return true;
+      } catch (e) {}
+      return false;
+    }
+
+    function updateAuthUI() {
+      const statusEl = document.getElementById('auth-status');
+      const formsEl = document.getElementById('auth-forms');
+      const loggedInEl = document.getElementById('auth-logged-in');
+      const nameEl = document.getElementById('user-display-name');
+
+      if (currentUser) {
+        // Extract display name from metadata or clean username
+        const usernameDisplay = (currentUser.user_metadata && currentUser.user_metadata.username) 
+          ? currentUser.user_metadata.username 
+          : currentUser.email.split('@')[0];
+
+        statusEl.textContent = "🟢 Logged In";
+        formsEl.style.display = "none";
+        loggedInEl.style.display = "flex";
+        nameEl.textContent = `👤 ${usernameDisplay}`;
+      } else {
+        statusEl.textContent = "Not logged in";
+        formsEl.style.display = "flex";
+        loggedInEl.style.display = "none";
+      }
+    }
+
+    // --- SOUND ENGINE ---
+    function playPopSound() {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.08);
+    }
+
+    // --- TAB SYSTEM ---
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    // --- BLOCK CODER & INPUT LOGIC ---
+    function renderScriptUI() {
+      scriptContainer.innerHTML = '';
+      
+      if (activeScript.length === 0) {
+        scriptContainer.innerHTML = '<div class="empty-msg">Click blocks above to build your script!</div>';
+        return;
+      }
+
+      activeScript.forEach((item, idx) => {
+        const block = document.createElement('div');
+        block.className = 'block ';
+        
+        if (item.type === 'WHEN_CLICKED') {
+          block.className += 'block-events';
+          block.innerHTML = `When Sprite Clicked`;
+        } 
+        else if (item.type === 'MOVE') {
+          block.className += 'block-motion';
+          block.innerHTML = `Move <input type="number" class="block-input" value="${item.val}" onchange="updateBlockValue(${idx}, 'val', this.value)"> steps`;
+        } 
+        else if (item.type === 'SPIN') {
+          block.className += 'block-motion';
+          block.innerHTML = `Turn <input type="number" class="block-input" value="${item.val}" onchange="updateBlockValue(${idx}, 'val', this.value)"> °`;
+        } 
+        else if (item.type === 'RANDOM_POS') {
+          block.className += 'block-motion';
+          block.innerHTML = `Go to Random Position`;
+        }
+        else if (item.type === 'SCORE') {
+          block.className += 'block-looks';
+          block.innerHTML = `Change Score by <input type="number" class="block-input" value="${item.val}" onchange="updateBlockValue(${idx}, 'val', this.value)">`;
+        } 
+        else if (item.type === 'SIZE') {
+          block.className += 'block-looks';
+          block.innerHTML = `Set Size to <input type="number" class="block-input" value="${item.val}" onchange="updateBlockValue(${idx}, 'val', this.value)">%`;
+        }
+        else if (item.type === 'SAY') {
+          block.className += 'block-looks';
+          block.innerHTML = `Say <input type="text" class="block-input block-input-text" value="${item.text !== undefined ? item.text : (item.val || 'Hello!')}" onchange="updateBlockValue(${idx}, 'text', this.value)"> for <input type="number" class="block-input" value="${item.duration || 2}" onchange="updateBlockValue(${idx}, 'duration', this.value)"> secs`;
+        }
+        else if (item.type === 'POP_SOUND') {
+          block.className += 'block-sound';
+          block.innerHTML = `Play Pop Sound`;
+        }
+        else if (item.type === 'WAIT') {
+          block.className += 'block-control';
+          block.innerHTML = `Wait <input type="number" class="block-input" value="${item.val}" onchange="updateBlockValue(${idx}, 'val', this.value)"> sec`;
+        }
+
+        scriptContainer.appendChild(block);
+      });
+
+      scriptContainer.scrollTop = scriptContainer.scrollHeight;
+    }
+
+    function addBlock(type, params = {}) {
+      const newBlock = { type: type, ...params };
+      activeScript.push(newBlock);
+      renderScriptUI();
+    }
+
+    function updateBlockValue(index, field, val) {
+      if (field === 'text') {
+        activeScript[index].text = val;
+      } else {
+        activeScript[index][field] = parseFloat(val) || 0;
+      }
+    }
+
+    function clearScript() {
+      activeScript = [];
+      renderScriptUI();
+    }
+
+    // --- ASYNC EXECUTE ENGINE ---
+    async function runScript() {
+      for (let item of activeScript) {
+        if (item.type === 'MOVE') {
+          const currentLeft = parseInt(gameSprite.style.left || 110);
+          gameSprite.style.left = (currentLeft > 220 ? 10 : currentLeft + Number(item.val)) + 'px';
+        }
+        else if (item.type === 'SPIN') {
+          rotation += Number(item.val);
+          gameSprite.style.transform = `rotate(${rotation}deg)`;
+        }
+        else if (item.type === 'RANDOM_POS') {
+          gameSprite.style.left = Math.floor(Math.random() * 220) + 'px';
+          gameSprite.style.top = Math.floor(Math.random() * 150) + 'px';
+        }
+        else if (item.type === 'SCORE') {
+          score += Number(item.val);
+          hudScore.textContent = `Score: ${score}`;
+        }
+        else if (item.type === 'SIZE') {
+          gameSprite.style.transform = `scale(${Number(item.val) / 100}) rotate(${rotation}deg)`;
+        }
+        else if (item.type === 'SAY') {
+          const sayText = item.text !== undefined ? item.text : (item.val || 'Hello!');
+          const sayDuration = item.duration !== undefined ? Number(item.duration) : 2;
+          
+          speechBubble.textContent = sayText;
+          speechBubble.style.display = 'block';
+          speechBubble.style.left = (parseInt(gameSprite.style.left || 110) + 10) + 'px';
+          speechBubble.style.top = (parseInt(gameSprite.style.top || 80) - 25) + 'px';
+          
+          await new Promise(r => setTimeout(r, sayDuration * 1000));
+          speechBubble.style.display = 'none';
+        }
+        else if (item.type === 'POP_SOUND') {
+          playPopSound();
+        }
+        else if (item.type === 'WAIT') {
+          await new Promise(r => setTimeout(r, item.val * 1000));
+        }
+      }
+    }
+
+    gameSprite.addEventListener('click', () => {
+      if (activeScript.length > 0 && activeScript[0].type === 'WHEN_CLICKED') {
+        runScript();
+      }
+    });
+
+    document.getElementById('btn-play').addEventListener('click', runScript);
+
+    // --- SPRITE & STAGE BACKGROUND LOGIC ---
+    function setStageBg(color) {
+      currentStageBg = color;
+      stage.style.backgroundColor = color;
+    }
+
+    let drawing = false;
+    drawCanvas.addEventListener('mousedown', () => drawing = true);
+    drawCanvas.addEventListener('mouseup', () => drawing = false);
+    drawCanvas.addEventListener('mousemove', draw);
+
+    function draw(e) {
+      if (!drawing) return;
+      const rect = drawCanvas.getBoundingClientRect();
+      ctx.fillStyle = document.getElementById('draw-color').value;
+      ctx.beginPath();
+      ctx.arc(e.clientX - rect.left, e.clientY - rect.top, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function clearCanvas() { ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height); }
+
+    function setEmojiSprite(emoji) {
+      currentSpriteType = 'emoji';
+      currentSpriteVal = emoji;
+      gameSprite.innerHTML = emoji;
+    }
+
+    function applyCustomDrawing() {
+      currentSpriteType = 'canvas';
+      currentSpriteVal = drawCanvas.toDataURL();
+      gameSprite.innerHTML = `<img src="${currentSpriteVal}" style="width:50px; height:50px;">`;
+    }
+
+    // --- ID GENERATOR & SHARE ENGINE ---
+    function generateLongID(length = 8) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let result = '';
+      for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return result;
+    }
+
+    document.getElementById('btn-save-game').addEventListener('click', async () => {
+      // Prevent banned user saves
+      if (currentUser && await checkIsBanned(currentUser.id)) {
+        alert("⛔ BANNED: You cannot save games.");
+        return;
+      }
+
+      const gameID = generateLongID(8);
+      
+      const gameObject = {
+        script: activeScript,
+        spriteType: currentSpriteType,
+        spriteVal: currentSpriteVal,
+        stageBg: currentStageBg,
+        author_id: currentUser ? currentUser.id : 'anonymous'
+      };
+
+      localStorage.setItem(`blocky_v13_${gameID}`, JSON.stringify(gameObject));
+
+      // Save to Supabase Cloud if connected
+      if (db) {
+        await db.from('projects').insert([{ id: gameID, data: gameObject, author_id: currentUser ? currentUser.id : null }]);
+      }
+
+      const copyBox = document.getElementById('copy-container');
+      const idInput = document.getElementById('generated-id-input');
+      idInput.value = gameID;
+      copyBox.style.display = 'flex';
+    });
+
+    document.getElementById('btn-copy-id').addEventListener('click', () => {
+      const idInput = document.getElementById('generated-id-input');
+      idInput.select();
+      navigator.clipboard.writeText(idInput.value);
+      
+      const status = document.getElementById('copy-status');
+      status.textContent = 'Copied to Clipboard!';
+      setTimeout(() => status.textContent = '', 2000);
+    });
+
+    document.getElementById('btn-load-id').addEventListener('click', async () => {
+      const loadID = document.getElementById('input-load-id').value.trim().toUpperCase();
+      let rawData = localStorage.getItem(`blocky_v13_${loadID}`);
+
+      // Attempt Supabase Fetch if not found locally
+      if (!rawData && db) {
+        const { data } = await db.from('projects').select('data').eq('id', loadID).single();
+        if (data) rawData = JSON.stringify(data.data);
+      }
+      
+      // Local fallbacks for older versions
+      if (!rawData) rawData = localStorage.getItem(`blocky_v12_${loadID}`);
+      if (!rawData) rawData = localStorage.getItem(`blocky_v116_${loadID}`);
+
+      if (rawData) {
+        const gameData = JSON.parse(rawData);
+        activeScript = gameData.script;
+        currentSpriteType = gameData.spriteType;
+        currentSpriteVal = gameData.spriteVal;
+        currentStageBg = gameData.stageBg || '#85c1e9';
+
+        setStageBg(currentStageBg);
+
+        if (currentSpriteType === 'emoji') setEmojiSprite(currentSpriteVal);
+        else gameSprite.innerHTML = `<img src="${currentSpriteVal}" style="width:50px; height:50px;">`;
+
+        renderScriptUI();
+        playPopSound();
+        alert('Blocky Game Loaded Successfully!');
+      } else {
+        alert('Game ID not found!');
+      }
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      score = 0;
+      rotation = 0;
+      hudScore.textContent = 'Score: 0';
+      gameSprite.style.left = '110px';
+      gameSprite.style.top = '80px';
+      gameSprite.style.transform = 'scale(1) rotate(0deg)';
+      setStageBg('#85c1e9');
+      speechBubble.style.display = 'none';
+    });
+
+    renderScriptUI();
+  </script>
+</body>
+</html>
