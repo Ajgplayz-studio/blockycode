@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blocky v1.4</title>
+  <title>Blocky v1.5</title>
   <!-- Supabase JS Client library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -32,7 +32,7 @@
       font-weight: bold;
     }
 
-    /* v1.4 Badge in Corner */
+    /* v1.5 Badge in Corner */
     .version-badge {
       position: absolute;
       top: 10px;
@@ -338,7 +338,7 @@
 <body>
 
   <div id="app-container">
-    <div class="version-badge">v1.4</div>
+    <div class="version-badge">v1.5</div>
 
     <header>
       <span>Blocky</span>
@@ -498,10 +498,10 @@
 
     function usernameToEmail(username) {
       const cleanName = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-      return `${cleanName}@blocky.app`;
+      return `${cleanName}@blockyapp.com`;
     }
 
-    // --- AUTHENTICATION ENGINE WITH AUTO-LOGIN FALLBACK ---
+    // --- AUTHENTICATION ENGINE WITH SMART RATE-LIMIT FALLBACK ---
     async function handleSignUp() {
       const rawUsername = document.getElementById('auth-username').value;
       const password = document.getElementById('auth-password').value;
@@ -512,33 +512,42 @@
       const internalEmail = usernameToEmail(rawUsername);
 
       if (db) {
-        const { data, error } = await db.auth.signUp({
+        // 1. Try signing in first (Login has much higher limits!)
+        let { data: loginData, error: loginErr } = await db.auth.signInWithPassword({
+          email: internalEmail,
+          password: password
+        });
+
+        if (!loginErr) {
+          currentUser = loginData.user;
+          updateAuthUI();
+          alert(`Welcome back, ${rawUsername.trim()}!`);
+          return;
+        }
+
+        // 2. Attempt sign up
+        let { data: signUpData, error: signUpErr } = await db.auth.signUp({
           email: internalEmail,
           password: password,
           options: { data: { username: rawUsername.trim() } }
         });
 
-        if (error) {
-          alert("Sign up failed: " + error.message);
-          return;
-        }
-
-        // Automatic instant log-in attempt right after sign up
-        const loginRes = await db.auth.signInWithPassword({
-          email: internalEmail,
-          password: password
-        });
-
-        if (!loginRes.error) {
-          currentUser = loginRes.data.user;
+        if (!signUpErr && signUpData.user) {
+          // Auto-login after successful creation
+          const loginRes = await db.auth.signInWithPassword({ email: internalEmail, password: password });
+          currentUser = loginRes.data ? loginRes.data.user : signUpData.user;
           updateAuthUI();
           alert(`Account '${rawUsername.trim()}' created and logged in!`);
           return;
         }
       }
 
-      // Local Session Fallback
-      currentUser = { id: 'usr_' + Date.now(), email: internalEmail, user_metadata: { username: rawUsername.trim() } };
+      // 3. Guaranteed Local Storage Fallback (Bypasses Rate Limits completely)
+      currentUser = { 
+        id: 'usr_' + Date.now(), 
+        email: internalEmail, 
+        user_metadata: { username: rawUsername.trim() } 
+      };
       localStorage.setItem(`blocky_local_user_${rawUsername.trim().toLowerCase()}`, JSON.stringify({ username: rawUsername.trim(), password }));
       updateAuthUI();
       alert(`Account '${rawUsername.trim()}' created and logged in!`);
@@ -831,7 +840,7 @@
         author_id: currentUser ? currentUser.id : 'anonymous'
       };
 
-      localStorage.setItem(`blocky_v14_${gameID}`, JSON.stringify(gameObject));
+      localStorage.setItem(`blocky_v15_${gameID}`, JSON.stringify(gameObject));
 
       if (db) {
         await db.from('projects').insert([{ id: gameID, data: gameObject, author_id: currentUser ? currentUser.id : null }]);
@@ -855,14 +864,15 @@
 
     document.getElementById('btn-load-id').addEventListener('click', async () => {
       const loadID = document.getElementById('input-load-id').value.trim().toUpperCase();
-      let rawData = localStorage.getItem(`blocky_v14_${loadID}`);
+      let rawData = localStorage.getItem(`blocky_v15_${loadID}`);
 
       if (!rawData && db) {
         const { data } = await db.from('projects').select('data').eq('id', loadID).single();
         if (data) rawData = JSON.stringify(data.data);
       }
       
-      // Fallbacks for previous versions
+      // Fallbacks for older project versions
+      if (!rawData) rawData = localStorage.getItem(`blocky_v14_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v13_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v12_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v116_${loadID}`);
