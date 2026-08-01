@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Blocky v2.0 Studio</title>
+  <title>Blocky v2.0.1 Studio</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
@@ -249,16 +249,13 @@
       <h3 style="margin:0; color:#ffbf00; text-align:center;">📜 Blocky Version Logs (v1.0 - v2.0)</h3>
       <div style="overflow-y: auto; max-height: 50vh; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;">
         <div class="log-entry">
-          <strong>v2.0:</strong> Added auto-save on publish workflow, auto-copy game IDs, and this version update log history tracker!
+          <strong>v2.0.1:</strong> Fixed database-first loading logic so games load reliably across multiple tabs and different browsers!
         </div>
         <div class="log-entry">
-          <strong>v1.9:</strong> Integrated custom game title fields right inside the workspace sidebar and robust multi-platform loading fallback.
+          <strong>v2.0:</strong> Added auto-save on publish workflow, auto-copy game IDs, and version update log history tracker!
         </div>
         <div class="log-entry">
-          <strong>v1.8:</strong> Restored visual block palette workspace & canvas stage runner logic.
-        </div>
-        <div class="log-entry">
-          <strong>v1.7:</strong> Built community hub database tables & Google Sites showcase integration.
+          <strong>v1.9:</strong> Integrated custom game title fields right inside the workspace sidebar.
         </div>
         <div class="log-entry">
           <strong>v1.5:</strong> Added user profile authentication, signup/login flows, and admin ban security policies.
@@ -430,10 +427,15 @@
         author: loggedUser || 'Anonymous'
       };
 
+      // Save to local storage as fallback
       localStorage.setItem(`blocky_${gameID}`, JSON.stringify(gameData));
 
+      // Save directly to the Cloud Database so any other tab/browser can access it
       if (db) {
-        await db.from('projects').insert([{ id: gameID, data: gameData }]);
+        const { error } = await db.from('projects').insert([{ id: gameID, data: gameData }]);
+        if (error) {
+          console.error("Database save warning:", error.message);
+        }
       }
 
       document.getElementById('current-game-title').textContent = `💻 Workspace: ${title}`;
@@ -455,6 +457,7 @@
 
       let loadedData = null;
 
+      // 1. Try fetching from Cloud Database FIRST (Ensures cross-tab & cross-device loading works)
       if (db) {
         const { data, error } = await db.from('projects').select('*').eq('id', id);
         if (data && data.length > 0) {
@@ -462,11 +465,13 @@
         }
       }
 
+      // 2. Fallback to LocalStorage if cloud lookup fails
       if (!loadedData) {
         const local = localStorage.getItem(`blocky_${id}`);
         if (local) loadedData = JSON.parse(local);
       }
 
+      // 3. Process Load
       if (loadedData && Array.isArray(loadedData.script)) {
         activeScript = loadedData.script;
         currentSavedID = id;
@@ -476,7 +481,7 @@
         renderWorkspace();
         alert(`🎉 '${title}' loaded successfully!\nCreated by: ${loadedData.author || 'Anonymous'}`);
       } else {
-        alert("❌ Invalid Game ID! Game not found.");
+        alert("❌ Invalid Game ID! Game not found in cloud database or local storage.");
       }
     });
 
