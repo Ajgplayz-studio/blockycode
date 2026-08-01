@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Blocky v1.9</title>
+  <title>Blocky v2.0 Studio</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing: border-box; }
@@ -41,6 +41,7 @@
     .btn-green { background: #4bc02f; }
     .btn-purple { background: #9966ff; }
     .btn-red { background: #ff4c4c; }
+    .btn-dark { background: #444; }
     
     .auth-container input {
       padding: 6px 10px;
@@ -146,7 +147,8 @@
       border: 2px solid #ffbf00;
       border-radius: 10px;
       padding: 20px;
-      width: 320px;
+      width: 350px;
+      max-height: 80vh;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -158,12 +160,23 @@
       color: white;
       border-radius: 4px;
     }
+    .log-entry {
+      background: #181825;
+      padding: 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      border-left: 4px solid #ffbf00;
+      margin-bottom: 6px;
+    }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>🧩 Blocky v1.9 Studio</h1>
+    <h1>🧩 Blocky v2.0 Studio</h1>
+    <div>
+      <button class="btn btn-dark" onclick="openLogsModal()">📜 Update Logs</button>
+    </div>
     <div class="auth-container" id="auth-box">
       <input type="text" id="auth-username" placeholder="Username">
       <input type="password" id="auth-password" placeholder="Password">
@@ -181,8 +194,8 @@
     <div class="panel" id="sidebar">
       <h3>📁 Tools</h3>
       <input type="text" id="save-title-input" placeholder="Game Title..." style="padding:8px; background:#181825; border:1px solid #444; color:white; border-radius:4px; width:100%;">
-      <button class="btn btn-green" id="btn-save-game">💾 Save Game</button>
-      <button class="btn btn-purple" id="btn-publish-game">🚀 Publish Hub</button>
+      <button class="btn btn-green" id="btn-save-game">💾 Save Draft</button>
+      <button class="btn btn-purple" id="btn-publish-game">🚀 Save & Publish</button>
       <hr style="width:100%; border:1px solid #3b3b54;">
       <input type="text" id="load-id-input" placeholder="Enter Game ID..." style="padding:8px; background:#181825; border:1px solid #444; color:white; border-radius:4px; width:100%;">
       <button class="btn" id="btn-load-game">📥 Load Game</button>
@@ -230,6 +243,34 @@
     </div>
   </div>
 
+  <!-- UPDATE LOGS MODAL -->
+  <div class="modal-overlay" id="logs-modal">
+    <div class="modal-card" style="width: 450px;">
+      <h3 style="margin:0; color:#ffbf00; text-align:center;">📜 Blocky Version Logs (v1.0 - v2.0)</h3>
+      <div style="overflow-y: auto; max-height: 50vh; display: flex; flex-direction: column; gap: 8px; padding-right: 5px;">
+        <div class="log-entry">
+          <strong>v2.0:</strong> Added auto-save on publish workflow, auto-copy game IDs, and this version update log history tracker!
+        </div>
+        <div class="log-entry">
+          <strong>v1.9:</strong> Integrated custom game title fields right inside the workspace sidebar and robust multi-platform loading fallback.
+        </div>
+        <div class="log-entry">
+          <strong>v1.8:</strong> Restored visual block palette workspace & canvas stage runner logic.
+        </div>
+        <div class="log-entry">
+          <strong>v1.7:</strong> Built community hub database tables & Google Sites showcase integration.
+        </div>
+        <div class="log-entry">
+          <strong>v1.5:</strong> Added user profile authentication, signup/login flows, and admin ban security policies.
+        </div>
+        <div class="log-entry">
+          <strong>v1.0:</strong> Initial Blocky concept release with raw node execution.
+        </div>
+      </div>
+      <button class="btn btn-red" style="margin-top: 10px;" onclick="closeLogsModal()">Close Logs</button>
+    </div>
+  </div>
+
   <script>
     const SUPABASE_URL = 'https://ohojsqpbjmhkjppxoccd.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ob2pzcXBiam1oa2pwcHhvY2NkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NDIwNjYsImV4cCI6MjEwMTExODA2Nn0.S7DCqf7gJQpVfWk8ELGCpX3_NLn36o24TKhOTyMxyNs';
@@ -238,6 +279,14 @@
     let loggedUser = null;
     let currentSavedID = null;
     let activeScript = [];
+
+    // --- LOGS MODAL CONTROLS ---
+    function openLogsModal() {
+      document.getElementById('logs-modal').style.display = 'flex';
+    }
+    function closeLogsModal() {
+      document.getElementById('logs-modal').style.display = 'none';
+    }
 
     // --- AUTHENTICATION ---
     async function handleAuth(type) {
@@ -371,14 +420,12 @@
       return Math.random().toString(36).substring(2, 2 + len).toUpperCase();
     }
 
-    document.getElementById('btn-save-game').addEventListener('click', async () => {
-      const titleInput = document.getElementById('save-title-input').value.trim();
-      const gameTitle = titleInput || "Untitled Game";
+    async function performSave(title) {
       const gameID = generateID();
       currentSavedID = gameID;
 
       const gameData = {
-        title: gameTitle,
+        title: title,
         script: activeScript,
         author: loggedUser || 'Anonymous'
       };
@@ -386,17 +433,20 @@
       localStorage.setItem(`blocky_${gameID}`, JSON.stringify(gameData));
 
       if (db) {
-        const { error } = await db.from('projects').insert([{ id: gameID, data: gameData }]);
-        if (error) console.error("Database save warning:", error.message);
+        await db.from('projects').insert([{ id: gameID, data: gameData }]);
       }
 
-      document.getElementById('current-game-title').textContent = `💻 Workspace: ${gameTitle}`;
+      document.getElementById('current-game-title').textContent = `💻 Workspace: ${title}`;
+      return gameID;
+    }
 
-      // Automatically copy to clipboard
+    document.getElementById('btn-save-game').addEventListener('click', async () => {
+      const titleInput = document.getElementById('save-title-input').value.trim();
+      const gameTitle = titleInput || "Untitled Game";
+      const gameID = await performSave(gameTitle);
+
       navigator.clipboard.writeText(gameID);
-
-      // Copyable prompt box
-      prompt(`✅ '${gameTitle}' Saved!\n\n(ID auto-copied to clipboard!) Copy below:`, gameID);
+      prompt(`✅ '${gameTitle}' Saved as Draft!\n\n(ID auto-copied to clipboard!) Copy below:`, gameID);
     });
 
     document.getElementById('btn-load-game').addEventListener('click', async () => {
@@ -405,7 +455,6 @@
 
       let loadedData = null;
 
-      // 1. Fetch from Supabase
       if (db) {
         const { data, error } = await db.from('projects').select('*').eq('id', id);
         if (data && data.length > 0) {
@@ -413,13 +462,11 @@
         }
       }
 
-      // 2. LocalStorage Fallback
       if (!loadedData) {
         const local = localStorage.getItem(`blocky_${id}`);
         if (local) loadedData = JSON.parse(local);
       }
 
-      // 3. Process Load
       if (loadedData && Array.isArray(loadedData.script)) {
         activeScript = loadedData.script;
         currentSavedID = id;
@@ -433,10 +480,8 @@
       }
     });
 
-    // PUBLISH HUB
     document.getElementById('btn-publish-game').addEventListener('click', () => {
       if (!loggedUser) return alert("You must log in to publish games to the Community Hub!");
-      if (!currentSavedID) currentSavedID = generateID();
       
       const currentTitle = document.getElementById('save-title-input').value.trim();
       if (currentTitle) document.getElementById('publish-title').value = currentTitle;
@@ -452,14 +497,17 @@
       const title = document.getElementById('publish-title').value.trim();
       if (!title) return alert("Please enter a title for your game!");
 
+      const newGameID = await performSave(title);
+
       const { error } = await db.from('published_games').insert([{
         title: title,
-        game_id: currentSavedID,
+        game_id: newGameID,
         author: loggedUser
       }]);
 
       if (!error) {
-        alert(`🚀 '${title}' published to Community Hub!\nGame ID: ${currentSavedID}`);
+        navigator.clipboard.writeText(newGameID);
+        prompt(`🚀 '${title}' successfully SAVED and PUBLISHED to the Community Hub!\n\n(Game ID auto-copied to clipboard!):`, newGameID);
         closePublishModal();
       } else {
         alert("Publishing failed: " + error.message);
