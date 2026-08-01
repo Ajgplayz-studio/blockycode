@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blocky v1.5</title>
+  <title>Blocky v1.6</title>
   <!-- Supabase JS Client library -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -32,7 +32,7 @@
       font-weight: bold;
     }
 
-    /* v1.5 Badge in Corner */
+    /* v1.6 Badge in Corner */
     .version-badge {
       position: absolute;
       top: 10px;
@@ -338,7 +338,7 @@
 <body>
 
   <div id="app-container">
-    <div class="version-badge">v1.5</div>
+    <div class="version-badge">v1.6</div>
 
     <header>
       <span>Blocky</span>
@@ -496,96 +496,78 @@
     const drawCanvas = document.getElementById('draw-canvas');
     const ctx = drawCanvas.getContext('2d');
 
-    function usernameToEmail(username) {
-      const cleanName = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-      return `${cleanName}@blockyapp.com`;
-    }
-
-    // --- AUTHENTICATION ENGINE WITH SMART RATE-LIMIT FALLBACK ---
+    // --- DATABASE PROFILES AUTHENTICATION ENGINE ---
     async function handleSignUp() {
-      const rawUsername = document.getElementById('auth-username').value;
+      const rawUsername = document.getElementById('auth-username').value.trim();
       const password = document.getElementById('auth-password').value;
 
       if (!rawUsername || !password) return alert("Please enter both a username and password.");
       if (rawUsername.length < 3) return alert("Username must be at least 3 characters.");
 
-      const internalEmail = usernameToEmail(rawUsername);
-
       if (db) {
-        // 1. Try signing in first (Login has much higher limits!)
-        let { data: loginData, error: loginErr } = await db.auth.signInWithPassword({
-          email: internalEmail,
-          password: password
-        });
+        // 1. Check if username already exists in the profiles table
+        const { data: existingUser } = await db
+          .from('profiles')
+          .select('username')
+          .eq('username', rawUsername)
+          .single();
 
-        if (!loginErr) {
-          currentUser = loginData.user;
-          updateAuthUI();
-          alert(`Welcome back, ${rawUsername.trim()}!`);
-          return;
+        if (existingUser) {
+          return alert(`Username '${rawUsername}' is already taken!`);
         }
 
-        // 2. Attempt sign up
-        let { data: signUpData, error: signUpErr } = await db.auth.signUp({
-          email: internalEmail,
-          password: password,
-          options: { data: { username: rawUsername.trim() } }
-        });
+        // 2. Insert new user directly into the profiles database table
+        const { data, error } = await db
+          .from('profiles')
+          .insert([{ username: rawUsername, password: password }]);
 
-        if (!signUpErr && signUpData.user) {
-          // Auto-login after successful creation
-          const loginRes = await db.auth.signInWithPassword({ email: internalEmail, password: password });
-          currentUser = loginRes.data ? loginRes.data.user : signUpData.user;
+        if (!error) {
+          currentUser = { user_metadata: { username: rawUsername } };
           updateAuthUI();
-          alert(`Account '${rawUsername.trim()}' created and logged in!`);
+          alert(`Account '${rawUsername}' created and saved to database!`);
+          return;
+        } else {
+          alert("Database error: " + error.message);
           return;
         }
       }
 
-      // 3. Guaranteed Local Storage Fallback (Bypasses Rate Limits completely)
-      currentUser = { 
-        id: 'usr_' + Date.now(), 
-        email: internalEmail, 
-        user_metadata: { username: rawUsername.trim() } 
-      };
-      localStorage.setItem(`blocky_local_user_${rawUsername.trim().toLowerCase()}`, JSON.stringify({ username: rawUsername.trim(), password }));
+      // Local fallback if database is offline
+      currentUser = { user_metadata: { username: rawUsername } };
       updateAuthUI();
-      alert(`Account '${rawUsername.trim()}' created and logged in!`);
     }
 
     async function handleLogIn() {
-      const rawUsername = document.getElementById('auth-username').value;
+      const rawUsername = document.getElementById('auth-username').value.trim();
       const password = document.getElementById('auth-password').value;
 
       if (!rawUsername || !password) return alert("Please enter both username and password.");
 
-      const internalEmail = usernameToEmail(rawUsername);
-
       if (db) {
-        const { data, error } = await db.auth.signInWithPassword({
-          email: internalEmail,
-          password: password
-        });
+        // Query the profiles table for username and password match
+        const { data, error } = await db
+          .from('profiles')
+          .select('*')
+          .eq('username', rawUsername)
+          .eq('password', password)
+          .single();
 
-        if (!error) {
-          const banned = await checkIsBanned(data.user.id);
-          if (banned) {
-            await db.auth.signOut();
-            alert("⛔ ACCOUNT BANNED: Your account has been suspended by an admin.");
-            return;
+        if (data) {
+          if (data.is_banned) {
+            return alert("⛔ ACCOUNT BANNED: Your account has been suspended by an admin.");
           }
-          currentUser = data.user;
+          currentUser = { id: data.id, user_metadata: { username: data.username } };
           updateAuthUI();
           return;
         }
       }
 
       // Local Session Fallback Login Check
-      const savedUser = localStorage.getItem(`blocky_local_user_${rawUsername.trim().toLowerCase()}`);
+      const savedUser = localStorage.getItem(`blocky_local_user_${rawUsername.toLowerCase()}`);
       if (savedUser) {
         const parsed = JSON.parse(savedUser);
         if (parsed.password === password) {
-          currentUser = { id: 'usr_local', email: internalEmail, user_metadata: { username: parsed.username } };
+          currentUser = { id: 'usr_local', user_metadata: { username: parsed.username } };
           updateAuthUI();
           return;
         }
@@ -595,17 +577,8 @@
     }
 
     async function handleLogOut() {
-      if (db) await db.auth.signOut();
       currentUser = null;
       updateAuthUI();
-    }
-
-    async function checkIsBanned(userId) {
-      try {
-        const { data } = await db.from('profiles').select('is_banned').eq('id', userId).single();
-        if (data && data.is_banned) return true;
-      } catch (e) {}
-      return false;
     }
 
     function updateAuthUI() {
@@ -617,7 +590,7 @@
       if (currentUser) {
         const usernameDisplay = (currentUser.user_metadata && currentUser.user_metadata.username) 
           ? currentUser.user_metadata.username 
-          : currentUser.email.split('@')[0];
+          : 'User';
 
         statusEl.textContent = "🟢 Logged In";
         formsEl.style.display = "none";
@@ -825,11 +798,6 @@
     }
 
     document.getElementById('btn-save-game').addEventListener('click', async () => {
-      if (currentUser && await checkIsBanned(currentUser.id)) {
-        alert("⛔ BANNED: You cannot save games.");
-        return;
-      }
-
       const gameID = generateLongID(8);
       
       const gameObject = {
@@ -837,13 +805,13 @@
         spriteType: currentSpriteType,
         spriteVal: currentSpriteVal,
         stageBg: currentStageBg,
-        author_id: currentUser ? currentUser.id : 'anonymous'
+        author_username: currentUser ? currentUser.user_metadata.username : 'anonymous'
       };
 
-      localStorage.setItem(`blocky_v15_${gameID}`, JSON.stringify(gameObject));
+      localStorage.setItem(`blocky_v16_${gameID}`, JSON.stringify(gameObject));
 
       if (db) {
-        await db.from('projects').insert([{ id: gameID, data: gameObject, author_id: currentUser ? currentUser.id : null }]);
+        await db.from('projects').insert([{ id: gameID, data: gameObject }]);
       }
 
       const copyBox = document.getElementById('copy-container');
@@ -864,18 +832,18 @@
 
     document.getElementById('btn-load-id').addEventListener('click', async () => {
       const loadID = document.getElementById('input-load-id').value.trim().toUpperCase();
-      let rawData = localStorage.getItem(`blocky_v15_${loadID}`);
+      let rawData = localStorage.getItem(`blocky_v16_${loadID}`);
 
       if (!rawData && db) {
         const { data } = await db.from('projects').select('data').eq('id', loadID).single();
         if (data) rawData = JSON.stringify(data.data);
       }
       
-      // Fallbacks for older project versions
+      // Legacy fallback for earlier game versions
+      if (!rawData) rawData = localStorage.getItem(`blocky_v15_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v14_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v13_${loadID}`);
       if (!rawData) rawData = localStorage.getItem(`blocky_v12_${loadID}`);
-      if (!rawData) rawData = localStorage.getItem(`blocky_v116_${loadID}`);
 
       if (rawData) {
         const gameData = JSON.parse(rawData);
